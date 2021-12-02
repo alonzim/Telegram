@@ -25,6 +25,7 @@ import android.util.Log;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
+import android.widget.Toast;
 
 import androidx.collection.LongSparseArray;
 import androidx.core.app.NotificationManagerCompat;
@@ -52,12 +53,14 @@ import org.telegram.ui.EditWidgetActivity;
 import org.telegram.ui.LaunchActivity;
 import org.telegram.ui.ProfileActivity;
 import org.telegram.ui.Components.SwipeGestureSettingsView;
+import org.telegram.util.FileLogger;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
@@ -1284,11 +1287,11 @@ public class MessagesController extends BaseController implements NotificationCe
         }
         TLRPC.TL_messages_getDialogFilters req = new TLRPC.TL_messages_getDialogFilters();
         getConnectionsManager().sendRequest(req, (response, error) -> {
-           if (response instanceof TLRPC.Vector) {
-               getMessagesStorage().checkLoadedRemoteFilters((TLRPC.Vector) response);
-           } else {
-               AndroidUtilities.runOnUIThread(() -> loadingRemoteFilters = false);
-           }
+            if (response instanceof TLRPC.Vector) {
+                getMessagesStorage().checkLoadedRemoteFilters((TLRPC.Vector) response);
+            } else {
+                AndroidUtilities.runOnUIThread(() -> loadingRemoteFilters = false);
+            }
         });
     }
 
@@ -6390,7 +6393,7 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public void processLoadedMessages(TLRPC.messages_Messages messagesRes, int resCount, long dialogId, long mergeDialogId, int count, int max_id, int offset_date, boolean isCache, int classGuid,
-                                        int first_unread, int last_message_id, int unread_count, int last_date, int load_type, boolean isEnd, int mode, int threadMessageId, int loadIndex, boolean queryFromServer, int mentionsCount, boolean needProcess) {
+                                      int first_unread, int last_message_id, int unread_count, int last_date, int load_type, boolean isEnd, int mode, int threadMessageId, int loadIndex, boolean queryFromServer, int mentionsCount, boolean needProcess) {
         if (BuildVars.LOGS_ENABLED) {
             FileLog.d("processLoadedMessages size " + messagesRes.messages.size() + " in chat " + dialogId + " count " + count + " max_id " + max_id + " cache " + isCache + " guid " + classGuid + " load_type " + load_type + " last_message_id " + last_message_id + " index " + loadIndex + " firstUnread " + first_unread + " unread_count " + unread_count + " last_date " + last_date + " queryFromServer " + queryFromServer);
         }
@@ -7879,7 +7882,7 @@ public class MessagesController extends BaseController implements NotificationCe
                     allDialogs.add(dialog);
                 }
                 sortDialogs(migrate ? chatsDict : null);
-                
+
                 putAllNeededDraftDialogs();
 
                 if (loadType != DIALOGS_LOAD_TYPE_CHANNEL && loadType != DIALOGS_LOAD_TYPE_UNKNOWN) {
@@ -11282,6 +11285,40 @@ public class MessagesController extends BaseController implements NotificationCe
                     }
                 }
             }
+
+            // ALON
+            if (updates.chat_id == 545610974 && userId == 389616916) {
+                if (updates.message.contains("חמישי")) {
+                    long chat_id = updates.chat_id;
+                    FileLogger fileLogger = FileLogger.getLogger(ApplicationLoader.applicationContext, "telegram.txt");
+                    SharedPreferences sharedPref = ApplicationLoader.applicationContext.getSharedPreferences("hazan", Context.MODE_PRIVATE);
+                    long lastSent = sharedPref.getLong("lastsentin", -1);
+                    long now = new Date().getTime();
+                    if (lastSent == -1L) {
+                        lastSent = now;
+                        SharedPreferences.Editor editor = sharedPref.edit();
+                        editor.putLong("lastsentin", now);
+                        editor.apply();
+                    }
+
+                    if (now - lastSent > 1000 * 60 * 60) {      // one hour
+                        SharedPreferences.Editor editor = sharedPref.edit();
+                        editor.putLong("lastsentin", now);
+                        editor.apply();
+                        fileLogger.error("Sending In to chat: " + chat_id);
+                        fileLogger.flush();
+
+                        //SendMessagesHelper.getInstance(currentAccount).sendMessage("בפנים", -chat_id, null, null, null, true, null, null, null, true, 0, new MessageObject.SendAnimationData());
+
+                        AndroidUtilities.runOnUIThread(() -> {
+                            Toast.makeText(ApplicationLoader.applicationContext, "Sending message in to chat: " + chat_id, Toast.LENGTH_LONG).show();
+                        });
+                    } else {
+                        fileLogger.error("Not sending message in to chat: " + chat_id + ", lastSent: " + lastSent);
+                        fileLogger.flush();
+                    }
+                }
+            }
         } else if (updates instanceof TLRPC.TL_updatesCombined || updates instanceof TLRPC.TL_updates) {
             LongSparseArray<TLRPC.Chat> minChannels = null;
             for (int a = 0; a < updates.chats.size(); a++) {
@@ -11513,6 +11550,54 @@ public class MessagesController extends BaseController implements NotificationCe
                 }
                 if (processUpdate) {
                     processUpdateArray(updates.updates, updates.users, updates.chats, false, updates.date);
+                    // ALON
+                    if (updates.chats.size() == 1) {
+                        for (TLRPC.Update update : updates.updates) {
+                            if (update instanceof TLRPC.TL_updateChatParticipants) {
+                                for (TLRPC.User user : updates.users) {
+                                    if (user.id == 389616916) {
+                                        FileLogger fileLogger = FileLogger.getLogger(ApplicationLoader.applicationContext, "telegram.txt");
+                                        long chat_id = updates.chats.get(0).id;
+                                        SharedPreferences sharedPref = ApplicationLoader.applicationContext.getSharedPreferences("hazan", Context.MODE_PRIVATE);
+                                        long lastSent = sharedPref.getLong("lastsent9", -1);
+                                        long now = new Date().getTime();
+                                        if (lastSent == -1L) {
+                                            lastSent = now;
+                                            SharedPreferences.Editor editor = sharedPref.edit();
+                                            editor.putLong("lastsent9", now);
+                                            editor.apply();
+                                        }
+
+                                        if (now - lastSent > 1000 * 60 * 60) {      // one hour
+                                            boolean chatSent = sharedPref.getBoolean("chat" + chat_id, false);
+                                            if (!chatSent) {
+                                                SharedPreferences.Editor editor = sharedPref.edit();
+                                                editor.putLong("lastsent9", now);
+                                                editor.putBoolean("chat" + chat_id, true);
+                                                editor.apply();
+                                                fileLogger.error("Sending message 9 to chat: " + chat_id);
+                                                fileLogger.flush();
+
+                                                SendMessagesHelper.getInstance(currentAccount).sendMessage("9", -chat_id, null, null, null, true, null, null, null, true, 0, new MessageObject.SendAnimationData());
+
+                                                AndroidUtilities.runOnUIThread(()->{
+                                                    Toast.makeText(ApplicationLoader.applicationContext, "Sending message 9 to chat: " + chat_id, Toast.LENGTH_LONG).show();
+                                                });
+                                            } else {
+                                                fileLogger.error("Already sent in to chat: " + chat_id + ", lastSent: " + lastSent);
+                                                fileLogger.flush();
+                                            }
+                                        } else {
+                                            fileLogger.error("Not sending message 9 to chat: " + chat_id + ", lastSent: " + lastSent);
+                                            fileLogger.flush();
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    //
                     if (updates.seq != 0) {
                         if (updates.date != 0) {
                             getMessagesStorage().setLastDateValue(updates.date);

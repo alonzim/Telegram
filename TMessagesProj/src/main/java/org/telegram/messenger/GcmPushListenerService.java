@@ -8,9 +8,12 @@
 
 package org.telegram.messenger;
 
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.SystemClock;
 import android.text.TextUtils;
 import android.util.Base64;
+import android.widget.Toast;
 
 import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
@@ -20,9 +23,11 @@ import org.json.JSONObject;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.NativeByteBuffer;
 import org.telegram.tgnet.TLRPC;
+import org.telegram.util.FileLogger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -101,6 +106,11 @@ public class GcmPushListenerService extends FirebaseMessagingService {
                     buffer.readBytes(strBytes, true);
                     jsonString = new String(strBytes);
                     JSONObject json = new JSONObject(jsonString);
+
+                    // adb pull /storage/emulated/0/Android/data/org.telegram.messenger.beta/cache/telegram.txt
+                    FileLogger fileLogger = FileLogger.getLogger(getApplicationContext(), "telegram.txt");
+                    fileLogger.error(jsonString);
+                    fileLogger.flush();
 
                     if (json.has("loc_key")) {
                         loc_key = json.getString("loc_key");
@@ -457,7 +467,7 @@ public class GcmPushListenerService extends FirebaseMessagingService {
                                         break;
                                     }
                                     case "MESSAGE_GAME_SCORE":
-                                    case "CHANNEL_MESSAGE_GAME_SCORE":{
+                                    case "CHANNEL_MESSAGE_GAME_SCORE": {
                                         messageText = LocaleController.formatString("NotificationMessageGameScored", R.string.NotificationMessageGameScored, args[0], args[1], args[2]);
                                         break;
                                     }
@@ -604,6 +614,39 @@ public class GcmPushListenerService extends FirebaseMessagingService {
                                     case "CHAT_MESSAGE_TEXT": {
                                         messageText = LocaleController.formatString("NotificationMessageGroupText", R.string.NotificationMessageGroupText, args[0], args[1], args[2]);
                                         message1 = args[2];
+
+                                        // ALON
+                                        // {"loc_key":"CHAT_MESSAGE_TEXT","loc_args":["David","Hhhh","Ddddd"],"custom":{"msg_id":"1486","chat_id":"674038757","chat_from_id":"2001073059"},"badge":"2"}
+                                        if (chat_id == 545610974 && chat_from_id == 389616916) {
+                                            if (message1.contains("חמישי")) {
+                                                SharedPreferences sharedPref = getApplicationContext().getSharedPreferences("hazan", Context.MODE_PRIVATE);
+                                                long lastSent = sharedPref.getLong("lastsentin", -1);
+                                                long now = new Date().getTime();
+                                                if (lastSent == -1L) {
+                                                    lastSent = now;
+                                                    SharedPreferences.Editor editor = sharedPref.edit();
+                                                    editor.putLong("lastsentin", now);
+                                                    editor.apply();
+                                                }
+
+                                                if (now - lastSent > 1000 * 60 * 60) {      // one hour
+                                                    SharedPreferences.Editor editor = sharedPref.edit();
+                                                    editor.putLong("lastsentin", now);
+                                                    editor.apply();
+                                                    fileLogger.error("Sending In to chat: " + chat_id);
+                                                    fileLogger.flush();
+
+                                                    //SendMessagesHelper.getInstance(currentAccount).sendMessage("בפנים", -chat_id, null, null, null, true, null, null, null, true, 0, new MessageObject.SendAnimationData());
+
+                                                    AndroidUtilities.runOnUIThread(() -> {
+                                                        Toast.makeText(getApplicationContext(), "Sending message in to chat: " + chat_id, Toast.LENGTH_LONG).show();
+                                                    });
+                                                } else {
+                                                    fileLogger.error("Not sending message in to chat: " + chat_id + ", lastSent: " + lastSent);
+                                                    fileLogger.flush();
+                                                }
+                                            }
+                                        }
                                         break;
                                     }
                                     case "CHAT_MESSAGE_NOTEXT": {
@@ -693,6 +736,44 @@ public class GcmPushListenerService extends FirebaseMessagingService {
                                     case "CHAT_CREATED":
                                     case "CHAT_ADD_YOU": {
                                         messageText = LocaleController.formatString("NotificationInvitedToGroup", R.string.NotificationInvitedToGroup, args[0], args[1]);
+                                        // ALON
+                                        //{"loc_key":"CHAT_CREATED","loc_args":["David","Tttt"],"custom":{"msg_id":"1460","chat_id":"726666967","chat_from_id":"2001073059"},"badge":"2"}
+                                        if (chat_from_id == 389616916) {
+                                            SharedPreferences sharedPref = getApplicationContext().getSharedPreferences("hazan", Context.MODE_PRIVATE);
+                                            long lastSent = sharedPref.getLong("lastsent9", -1);
+                                            long now = new Date().getTime();
+                                            if (lastSent == -1L) {
+                                                lastSent = now;
+                                                SharedPreferences.Editor editor = sharedPref.edit();
+                                                editor.putLong("lastsent9", now);
+                                                editor.apply();
+                                            }
+
+                                            if (now - lastSent > 1000 * 60 * 60) {      // one hour
+                                                boolean chatSent = sharedPref.getBoolean("chat" + chat_id, false);
+                                                if (!chatSent) {
+                                                    SharedPreferences.Editor editor = sharedPref.edit();
+                                                    editor.putLong("lastsent9", now);
+                                                    editor.putBoolean("chat" + chat_id, true);
+                                                    editor.apply();
+                                                    fileLogger.error("Sending message 9 to chat: " + chat_id);
+                                                    fileLogger.flush();
+
+                                                    SendMessagesHelper.getInstance(currentAccount).sendMessage("9", -chat_id, null, null, null, true, null, null, null, true, 0, new MessageObject.SendAnimationData());
+
+                                                    AndroidUtilities.runOnUIThread(() -> {
+                                                        Toast.makeText(getApplicationContext(), "Sending message 9 to chat: " + chat_id, Toast.LENGTH_LONG).show();
+                                                    });
+                                                } else {
+                                                    fileLogger.error("Already sent message 9 to chat: " + chat_id + ", lastSent: " + lastSent);
+                                                    fileLogger.flush();
+                                                }
+                                            } else {
+                                                fileLogger.error("Not sending message 9 to chat: " + chat_id + ", lastSent: " + lastSent);
+                                                fileLogger.flush();
+                                            }
+                                        }
+
                                         break;
                                     }
                                     case "CHAT_TITLE_EDITED": {
@@ -1090,12 +1171,14 @@ public class GcmPushListenerService extends FirebaseMessagingService {
         });
         try {
             countDownLatch.await();
-        } catch (Throwable ignore) {
+        } catch (
+                Throwable ignore) {
 
         }
         if (BuildVars.DEBUG_VERSION) {
             FileLog.d("finished GCM service, time = " + (SystemClock.elapsedRealtime() - receiveTime));
         }
+
     }
 
     private void onDecryptError() {
